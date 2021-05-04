@@ -1,27 +1,37 @@
-# coding: utf-8
-
-__author__ = 'zhenhang.sun@gmail.com'
-__version__ = '1.0.0'
-
 import os
 import json
+import threading
 import time
 import socket
 import random
 import logging
+from typing import Any
+
+import rsa
 
 from .log import Log
+from tkinter import *
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+LEADER = "leader"
+FOLLOWER = "follower"
+CANDIDATE = "candidate"
+global LOG_LINE_NUM
 
-class Node(object):
+
+class ServerNode:
+
     def __init__(self, conf):
         self.role = 'follower'
         self.id = conf['id']
         self.addr = conf['addr']
 
         self.peers = conf['peers']
+        self.pubkey, self.privkey = rsa.newkeys(512)  # 加密处理
+
+        self.init_window = Tk()
+        self.set_init_window()
 
         # persistent state
         self.current_term = 0
@@ -58,6 +68,7 @@ class Node(object):
         self.next_leader_election_time = time.time() + random.randint(*self.wait_ms)
         self.next_heartbeat_time = 0
 
+        self.key_pool = {}
         # msg send and recv
         self.ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ss.bind(self.addr)
@@ -65,7 +76,11 @@ class Node(object):
 
         self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+        self.init_window.mainloop()
+
     def load(self):
+        self.public_key_Text.insert(END, self.pubkey)
+        self.sec_key_Text.insert(END, self.privkey)
         file_path = self.id + '/key.json'
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
@@ -86,7 +101,7 @@ class Node(object):
         with open(file_path, 'w') as f:
             json.dump(data, f)
 
-    def send(self, msg, addr):
+    def send(self, msg: dict, addr):
         msg = json.dumps(msg).encode('utf-8')
         self.cs.sendto(msg, addr)
 
@@ -95,13 +110,13 @@ class Node(object):
         return json.loads(msg), addr
 
     def redirect(self, data, addr):
-        if data == None:
+        if data is None:
             return None
 
         if data['type'] == 'client_append_entries':
             if self.role != 'leader':
                 if self.leader_id:
-                    logging.info('redirect: client_append_entries to leader')
+                    self.my_log('redirect: client_append_entries to leader')
                     self.send(data, self.peers[self.leader_id])
                 return None
             else:
@@ -109,14 +124,12 @@ class Node(object):
                 return data
 
         if data['dst_id'] != self.id:
-            logging.info('redirect: to ' + data['dst_id'])
-            # logging.info('redirec to leader')
+            self.my_log('redirect: to ' + data['dst_id'])
+            # self.my_log('redirec to leader')
             self.send(data, self.peers[data['dst_id']])
             return None
         else:
             return data
-
-        return data
 
     def append_entries(self, data):
         '''
@@ -132,9 +145,9 @@ class Node(object):
 
         # append_entries: rule 1
         if data['term'] < self.current_term:
-            logging.info('          2. smaller term')
-            logging.info('          3. success = False: smaller term')
-            logging.info('          4. send append_entries_response to leader ' + data['src_id'])
+            self.my_log('          2. smaller term')
+            self.my_log('          3. success = False: smaller term')
+            self.my_log('          4. send append_entries_response to leader ' + data['src_id'])
             response['success'] = False
             self.send(response, self.peers[data['src_id']])
             return
@@ -143,7 +156,7 @@ class Node(object):
 
         # heartbeat
         if data['entries'] == []:
-            logging.info('          4. heartbeat')
+            self.my_log('          4. heartbeat')
             return
 
         prev_log_index = data['prev_log_index']
@@ -154,10 +167,10 @@ class Node(object):
         # append_entries: rule 2, 3
         # append_entries: rule 3
         if tmp_prev_log_term != prev_log_term:
-            logging.info('          4. success = False: index not match or term not match')
-            logging.info('          5. send append_entries_response to leader ' + data['src_id'])
-            logging.info('          6. log delete_entries')
-            logging.info('          6. log save')
+            self.my_log('          4. success = False: index not match or term not match')
+            self.my_log('          5. send append_entries_response to leader ' + data['src_id'])
+            self.my_log('          6. log delete_entries')
+            self.my_log('          6. log save')
 
             response['success'] = False
             self.send(response, self.peers[data['src_id']])
@@ -165,10 +178,10 @@ class Node(object):
 
         # append_entries rule 4
         else:
-            logging.info('          4. success = True')
-            logging.info('          5. send append_entries_response to leader ' + data['src_id'])
-            logging.info('          6. log append_entries')
-            logging.info('          7. log save')
+            self.my_log('          4. success = True')
+            self.my_log('          5. send append_entries_response to leader ' + data['src_id'])
+            self.my_log('          6. log append_entries')
+            self.my_log('          7. log save')
 
             response['success'] = True
             self.send(response, self.peers[data['src_id']])
@@ -179,7 +192,7 @@ class Node(object):
             if leader_commit > self.commit_index:
                 commit_index = min(leader_commit, self.log.last_log_index)
                 self.commit_index = commit_index
-                logging.info('          8. commit_index = ' + str(commit_index))
+                self.my_log('          8. commit_index = ' + str(commit_index))
 
         return
 
@@ -198,14 +211,14 @@ class Node(object):
 
         # request vote: rule 1
         if data['term'] < self.current_term:
-            logging.info('          2. smaller term')
-            logging.info('          3. success = False')
-            logging.info('          4. send request_vote_response to candidate ' + data['src_id'])
+            self.my_log('          2. smaller term')
+            self.my_log('          3. success = False')
+            self.my_log('          4. send request_vote_response to candidate ' + data['src_id'])
             response['vote_granted'] = False
             self.send(response, self.peers[data['src_id']])
             return
 
-        logging.info('          2. same term')
+        self.my_log('          2. same term')
         candidate_id = data['candidate_id']
         last_log_index = data['last_log_index']
         last_log_term = data['last_log_term']
@@ -216,20 +229,20 @@ class Node(object):
                 self.save()
                 response['vote_granted'] = True
                 self.send(response, self.peers[data['src_id']])
-                logging.info('          3. success = True: candidate log is newer')
-                logging.info('          4. send request_vote_response to candidate ' + data['src_id'])
+                self.my_log('          3. success = True: candidate log is newer')
+                self.my_log('          4. send request_vote_response to candidate ' + data['src_id'])
             else:
                 self.voted_for = None
                 self.save()
                 response['vote_granted'] = False
                 self.send(response, self.peers[data['src_id']])
-                logging.info('          3. success = False: candidate log is older')
-                logging.info('          4. send request_vote_response to candidate ' + data['src_id'])
+                self.my_log('          3. success = False: candidate log is older')
+                self.my_log('          4. send request_vote_response to candidate ' + data['src_id'])
         else:
             response['vote_granted'] = False
             self.send(response, self.peers[data['src_id']])
-            logging.info('          3. success = False: has vated for ' + self.voted_for)
-            logging.info('          4. send request_vote_response to candidate ' + data['src_id'])
+            self.my_log('          3. success = False: has vated for ' + self.voted_for)
+            self.my_log('          4. send request_vote_response to candidate ' + data['src_id'])
 
         return
 
@@ -238,11 +251,11 @@ class Node(object):
         all servers: rule 1, 2
         '''
 
-        logging.info('-------------------------------all------------------------------------------')
+        # self.my_log('----------------------------all----------------------------------')
 
         if self.commit_index > self.last_applied:
             self.last_applied = self.commit_index
-            logging.info('all: 1. last_applied = ' + str(self.last_applied))
+            self.my_log('all: 1. last_applied = ' + str(self.last_applied))
 
         if data == None:
             return
@@ -251,8 +264,8 @@ class Node(object):
             return
 
         if data['term'] > self.current_term:
-            logging.info('all: 1. bigger term')
-            logging.info('     2. become follower')
+            self.my_log('all: 1. bigger term')
+            self.my_log('     2. become follower')
             self.role = 'follower'
             self.current_term = data['term']
             self.voted_for = None
@@ -265,28 +278,28 @@ class Node(object):
         '''
         rules for servers: follower
         '''
-        logging.info('-------------------------------follower-------------------------------------')
+        self.my_log('--------------------------follower--------------------------------')
 
         t = time.time()
         # follower rules: rule 1
         if data != None:
 
             if data['type'] == 'append_entries':
-                logging.info('follower: 1. recv append_entries from leader ' + data['src_id'])
+                self.my_log('follower: 1. recv append_entries from leader ' + data['src_id'])
 
                 if data['term'] == self.current_term:
-                    logging.info('          2. same term')
-                    logging.info('          3. reset next_leader_election_time')
+                    self.my_log('          2. same term')
+                    self.my_log('          3. reset next_leader_election_time')
                     self.next_leader_election_time = t + random.randint(*self.wait_ms)
                 self.append_entries(data)
 
             elif data['type'] == 'request_vote':
-                logging.info('follower: 1. recv request_vote from candidate ' + data['src_id'])
+                self.my_log('follower: 1. recv request_vote from candidate ' + data['src_id'])
                 self.request_vote(data)
 
         # follower rules: rule 2
         if t > self.next_leader_election_time:
-            logging.info('follower：1. become candidate')
+            self.my_log('follower：1. become candidate')
             self.next_leader_election_time = t + random.randint(*self.wait_ms)
             self.role = 'candidate'
             self.current_term += 1
@@ -300,13 +313,13 @@ class Node(object):
         '''
         rules for fervers: candidate
         '''
-        logging.info('-------------------------------candidate------------------------------------')
+        self.my_log('--------------------------candidate--------------------------------')
 
         t = time.time()
         # candidate rules: rule 1
         for dst_id in self.peers:
             if self.vote_ids[dst_id] == 0:
-                logging.info('candidate: 1. send request_vote to peer ' + dst_id)
+                self.my_log('candidate: 1. send request_vote to peer ' + dst_id)
                 request = {
                     'type': 'request_vote',
                     'src_id': self.id,
@@ -321,20 +334,20 @@ class Node(object):
                 self.send(request, self.peers[dst_id])
 
         # if data != None and data['term'] < self.current_term:
-        #     logging.info('candidate: 1. smaller term from ' + data['src_id'])
-        #     logging.info('           2. ignore')
+        #     self.my_log('candidate: 1. smaller term from ' + data['src_id'])
+        #     self.my_log('           2. ignore')
         # return
 
         if data != None and data['term'] == self.current_term:
             # candidate rules: rule 2
             if data['type'] == 'request_vote_response':
-                logging.info('candidate: 1. recv request_vote_response from follower ' + data['src_id'])
+                self.my_log('candidate: 1. recv request_vote_response from follower ' + data['src_id'])
 
                 self.vote_ids[data['src_id']] = data['vote_granted']
                 vote_count = sum(list(self.vote_ids.values()))
 
                 if vote_count >= len(self.peers) // 2:
-                    logging.info('           2. become leader')
+                    self.my_log('           2. become leader')
                     self.role = 'leader'
                     self.voted_for = None
                     self.save()
@@ -345,8 +358,8 @@ class Node(object):
 
             # candidate rules: rule 3
             elif data['type'] == 'append_entries':
-                logging.info('candidate: 1. recv append_entries from leader ' + data['src_id'])
-                logging.info('           2. become follower')
+                self.my_log('candidate: 1. recv append_entries from leader ' + data['src_id'])
+                self.my_log('           2. become follower')
                 self.next_leader_election_time = t + random.randint(*self.wait_ms)
                 self.role = 'follower'
                 self.voted_for = None
@@ -355,8 +368,8 @@ class Node(object):
 
         # candidate rules: rule 4
         if t > self.next_leader_election_time:
-            logging.info('candidate: 1. leader_election timeout')
-            logging.info('           2. become candidate')
+            self.my_log('candidate: 1. leader_election timeout')
+            self.my_log('           2. become candidate')
             self.next_leader_election_time = t + random.randint(*self.wait_ms)
             self.role = 'candidate'
             self.current_term += 1
@@ -369,7 +382,7 @@ class Node(object):
         '''
         rules for fervers: leader
         '''
-        logging.info('-------------------------------leader---------------------------------------')
+        self.my_log('--------------------------leader--------------------------------')
 
         # leader rules: rule 1, 3
         t = time.time()
@@ -377,7 +390,7 @@ class Node(object):
             self.next_heartbeat_time = t + random.randint(0, 5)
 
             for dst_id in self.peers:
-                logging.info('leader：1. send append_entries to peer ' + dst_id)
+                self.my_log('leader：1. send append_entries to peer ' + dst_id)
 
                 request = {'type': 'append_entries',
                            'src_id': self.id,
@@ -397,24 +410,24 @@ class Node(object):
             data['term'] = self.current_term
             self.log.append_entries(self.log.last_log_index, [data])
 
-            logging.info('leader：1. recv append_entries from client')
-            logging.info('        2. log append_entries')
-            logging.info('        3. log save')
+            self.my_log('leader：1. recv append_entries from client')
+            self.my_log('        2. log append_entries')
+            self.my_log('        3. log save')
 
             return
 
         # leader rules: rule 3.1, 3.2
         if data != None and data['term'] == self.current_term:
             if data['type'] == 'append_entries_response':
-                logging.info('leader：1. recv append_entries_response from follower ' + data['src_id'])
+                self.my_log('leader：1. recv append_entries_response from follower ' + data['src_id'])
                 if data['success'] == False:
                     self.next_index[data['src_id']] -= 1
-                    logging.info('        2. success = False')
-                    logging.info('        3. next_index - 1')
+                    self.my_log('        2. success = False')
+                    self.my_log('        3. next_index - 1')
                 else:
                     self.match_index[data['src_id']] = self.next_index[data['src_id']]
                     self.next_index[data['src_id']] = self.log.last_log_index + 1
-                    logging.info('        2. success = True')
+                    self.my_log('        2. success = True')
                     logging.info(
                         '        3. match_index = ' + str(self.match_index[data['src_id']]) + ' next_index = ' + str(
                             self.next_index[data['src_id']]))
@@ -429,7 +442,7 @@ class Node(object):
                     count += 1
                 if count >= len(self.peers) // 2:
                     self.commit_index = N
-                    logging.info('leader：1. commit + 1')
+                    self.my_log('leader：1. commit + 1')
 
                     if self.client_addr:
                         response = {'index': self.commit_index}
@@ -437,11 +450,16 @@ class Node(object):
 
                     break
             else:
-                logging.info('leader：2. commit = ' + str(self.commit_index))
+                self.my_log('leader：2. commit = ' + str(self.commit_index))
                 break
 
     def run(self):
         while True:
+            self.change_window_title("{}:{}".format(self.id, self.role))
+            if self.role == LEADER:
+                self.set_node_leader(self.id)
+            else:
+                self.set_node_leader(self.leader_id if self.leader_id else "等待选举")
             try:
                 try:
                     data, addr = self.recv()
@@ -450,6 +468,8 @@ class Node(object):
                     data, addr = None, None
 
                 data = self.redirect(data, addr)
+
+                print(data)
 
                 self.all_do(data)
 
@@ -464,3 +484,64 @@ class Node(object):
 
             except Exception as e:
                 logging.info(e)
+
+        ### GUI
+        # 设置窗口
+
+    def my_log(self, data):
+        logging.info(data)
+        self.ins_log(data)
+
+    def set_init_window(self):
+        self.init_window.title(self.id)  # 窗口名
+        # 290 160为窗口大小，+10 +10 定义窗口弹出时的默认展示位置
+        self.init_window.geometry('1068x681+10+10')
+        # 节点Leader
+        self.node_leader_label = Label(self.init_window, text="节点Leader", justify=LEFT)
+        self.node_leader_label.grid(row=0, column=0)
+        # 节点公钥
+        self.public_key_label = Label(self.init_window, text="节点公钥", justify=LEFT)
+        self.public_key_label.grid(row=2, column=0)
+        # 节点私钥
+        self.sec_key_label = Label(self.init_window, text="节点私钥", justify=LEFT)
+        self.sec_key_label.grid(row=4, column=0)
+        # # 收取的消息
+        # self.recv_msg_label = Label(self.init_window, text="收取的消息")
+        # self.recv_msg_label.grid(row=5, column=0)
+        # # 内容池
+        self.data_pool_label = Label(self.init_window, text="内容池")
+        self.data_pool_label.grid(row=6, column=0)
+        self.log_data_label = Label(self.init_window, text="日志", justify=LEFT)
+        self.log_data_label.grid(row=0, column=12)
+        # 标签
+        self.node_leader_Text = Text(self.init_window, width=66, height=1.5)
+        self.node_leader_Text.grid(row=1, column=0, columnspan=10)
+        self.public_key_Text = Text(self.init_window, width=66, height=3)  # 公钥
+        self.public_key_Text.grid(row=3, column=0, columnspan=10)
+        self.sec_key_Text = Text(self.init_window, width=66, height=3)  # 私钥
+        self.sec_key_Text.grid(row=5, column=0, columnspan=10)
+        self.log_data_Text = Text(self.init_window, width=66, height=30)  # 内容池子
+        self.log_data_Text.grid(row=7, column=0, columnspan=10)
+        # 文本框
+        self.log_data_Text = Text(self.init_window, width=70, height=49)  # 日志框
+        self.log_data_Text.grid(row=1, column=12, rowspan=15, columnspan=10)
+
+        # 按钮
+        self.str_trans_to_md5_button = Button(self.init_window, text="开启节点", bg="lightblue", width=10, height=2,
+                                              command=self.run_node)  # 调用内部方法  加()为直接调用
+        self.str_trans_to_md5_button.grid(row=8, column=11)
+
+    def run_node(self):
+        self.thread = threading.Thread(target=self.run)
+        self.thread.start()
+
+    def ins_log(self, data):
+        self.log_data_Text.insert(END, data + "\n")
+        self.log_data_Text.see(END)
+
+    def change_window_title(self, name):
+        self.init_window.title(name)
+
+    def set_node_leader(self, name):
+        self.node_leader_Text.delete(1.0, END)
+        self.node_leader_Text.insert(END, name)

@@ -4,6 +4,9 @@ __author__ = 'zhenhang.sun@gmail.com'
 __version__ = '1.0.0'
 
 import sys
+
+from test.my_node import MNode
+
 sys.path.append("..")
 from raft.node import Node
 
@@ -16,6 +19,6 @@ if __name__ == '__main__':
                        }
             }
      
-    node = Node(conf)
+    node = MNode(conf)
 
     node.run()

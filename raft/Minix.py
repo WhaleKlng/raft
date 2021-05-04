@@ -28,7 +28,7 @@ class ServerNode:
         self.addr = conf['addr']
 
         self.peers = conf['peers']
-        self.pubkey, self.privkey = rsa.newkeys(512)  # 加密处理
+        self.pubkey, self.privkey = rsa.newkeys(1024)  # 加密处理
 
         self.init_window = Tk()
         self.set_init_window()
@@ -101,13 +101,51 @@ class ServerNode:
         with open(file_path, 'w') as f:
             json.dump(data, f)
 
+    def get_pub_key_by_addr(self, addr):
+        for k in self.peers:
+            if self.peers[k] == addr:
+                return rsa.PublicKey.load_pkcs1(self.key_pool[k])
+
     def send(self, msg: dict, addr):
-        msg = json.dumps(msg).encode('utf-8')
-        self.cs.sendto(msg, addr)
+        msg_type = msg['type']
+        if msg_type == 'request_vote':  # 第一步
+            public_key_str = self.pubkey.save_pkcs1().decode()
+            print("{}成为候选者并且发送公钥:{}".format(self.id, public_key_str))
+            msg['p_key'] = public_key_str
+            rst = json.dumps(msg).encode()
+        elif msg_type == "request_vote_response":  # 第三步： 响应征票请求  需要加密消息并拼接一下
+            rst = json.dumps(msg)
+            print("中间件拦截到了更随着的征票响应数据：{}".format(rst))
+            crypto_text = rsa.encrypt(rst.encode(), self.get_pub_key_by_addr(addr))
+            rst = b"votes_response " + crypto_text
+            print("中间件后续处理消息为：{}".format(rst))
+            try:
+                self.cs.sendto(rst, addr)
+            except Exception as e:
+                print(e)
+        else:
+            rst = json.dumps(msg).encode()
+        self.cs.sendto(rst, addr)
 
     def recv(self):
         msg, addr = self.ss.recvfrom(65535)
-        return json.loads(msg), addr
+        # 如果收到的消息前缀中包含：vote_response的话，就切片处理之
+        # msg 现在是一个字符串
+        print(msg)
+        print(type(msg))
+        if b"votes_response " in msg:  # 收到的是征票响应类信息
+            print("进来了")
+            data = msg[15:]  # 得到密文
+            rst = json.loads(rsa.decrypt(data, self.privkey).decode())  # 解密之
+            print(rst)
+            return rst, addr
+        else:  # 普通信息
+            rst = json.loads(msg)
+            if rst['type'] == "request_vote":  # 第二步：是征票请求
+                print("{}节点收到候选者{}的征票请求，且密码是{}".format(self.id, rst['src_id'], rst['p_key']))
+                self.key_pool[rst['src_id']] = rst['p_key']
+                print("存入节点公钥成功,现在的车子是{}".format(self.key_pool))
+            return rst, addr
 
     def redirect(self, data, addr):
         if data is None:
@@ -244,8 +282,6 @@ class ServerNode:
             self.my_log('          3. success = False: has vated for ' + self.voted_for)
             self.my_log('          4. send request_vote_response to candidate ' + data['src_id'])
 
-        return
-
     def all_do(self, data):
         '''
         all servers: rule 1, 2
@@ -327,7 +363,8 @@ class ServerNode:
                     'term': self.current_term,
                     'candidate_id': self.id,
                     'last_log_index': self.log.last_log_index,
-                    'last_log_term': self.log.last_log_term
+                    'last_log_term': self.log.last_log_term,
+                    'p_key': self.pubkey  # 候选者同时广播个人公钥
                 }
                 # logging.info(request)
 
@@ -464,12 +501,10 @@ class ServerNode:
                 try:
                     data, addr = self.recv()
                 except Exception as e:
-                    # logging.info(e)
+                    logging.info(e)
                     data, addr = None, None
 
                 data = self.redirect(data, addr)
-
-                print(data)
 
                 self.all_do(data)
 

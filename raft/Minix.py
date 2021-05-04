@@ -5,7 +5,6 @@ import time
 import socket
 import random
 import logging
-from typing import Any
 
 import rsa
 
@@ -170,10 +169,11 @@ class ServerNode:
             return data
 
     def append_entries(self, data):
-        '''
-        append entries rpc
-        only used in follower state
-        '''
+        """
+        追加条目
+        :param data:
+        :return:
+        """
         response = {'type': 'append_entries_response',
                     'src_id': self.id,
                     'dst_id': data['src_id'],
@@ -193,7 +193,7 @@ class ServerNode:
         self.leader_id = data['leader_id']
 
         # heartbeat
-        if data['entries'] == []:
+        if not data['entries']:
             self.my_log('          4. heartbeat')
             return
 
@@ -261,7 +261,7 @@ class ServerNode:
         last_log_index = data['last_log_index']
         last_log_term = data['last_log_term']
 
-        if self.voted_for == None or self.voted_for == candidate_id:
+        if self.voted_for is None or self.voted_for == candidate_id:
             if last_log_index >= self.log.last_log_index and last_log_term >= self.log.last_log_term:
                 self.voted_for = data['src_id']
                 self.save()
@@ -293,7 +293,7 @@ class ServerNode:
             self.last_applied = self.commit_index
             self.my_log('all: 1. last_applied = ' + str(self.last_applied))
 
-        if data == None:
+        if data is None:
             return
 
         if data['type'] == 'client_append_entries':
@@ -318,7 +318,7 @@ class ServerNode:
 
         t = time.time()
         # follower rules: rule 1
-        if data != None:
+        if data:
 
             if data['type'] == 'append_entries':
                 self.my_log('follower: 1. recv append_entries from leader ' + data['src_id'])
@@ -375,7 +375,7 @@ class ServerNode:
         #     self.my_log('           2. ignore')
         # return
 
-        if data != None and data['term'] == self.current_term:
+        if data and data['term'] == self.current_term:
             # candidate rules: rule 2
             if data['type'] == 'request_vote_response':
                 self.my_log('candidate: 1. recv request_vote_response from follower ' + data['src_id'])
@@ -443,7 +443,7 @@ class ServerNode:
                 self.send(request, self.peers[dst_id])
 
         # leader rules: rule 2
-        if data != None and data['type'] == 'client_append_entries':
+        if data and data['type'] == 'client_append_entries':
             data['term'] = self.current_term
             self.log.append_entries(self.log.last_log_index, [data])
 
@@ -454,10 +454,10 @@ class ServerNode:
             return
 
         # leader rules: rule 3.1, 3.2
-        if data != None and data['term'] == self.current_term:
+        if data and data['term'] == self.current_term:
             if data['type'] == 'append_entries_response':
                 self.my_log('leader：1. recv append_entries_response from follower ' + data['src_id'])
-                if data['success'] == False:
+                if data['success'] is False:
                     self.next_index[data['src_id']] -= 1
                     self.my_log('        2. success = False')
                     self.my_log('        3. next_index - 1')
@@ -520,8 +520,7 @@ class ServerNode:
             except Exception as e:
                 logging.info(e)
 
-        ### GUI
-        # 设置窗口
+    #  GUI 设置窗口
 
     def my_log(self, data):
         logging.info(data)

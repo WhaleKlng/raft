@@ -49,43 +49,6 @@ class Empower:
         self.run_recv()
         self.init_window.mainloop()
 
-    # 功能函数
-    def str_trans_to_md5(self):
-        src = self.init_data_Text.get(1.0, END).strip().replace("\n", "").encode()
-        # print("src =",src)
-        if src:
-            try:
-                myMd5 = hashlib.md5()
-                myMd5.update(src)
-                myMd5_Digest = myMd5.hexdigest()
-                # print(myMd5_Digest)
-                # 输出到界面
-                self.result_data_Text.delete(1.0, END)
-                self.result_data_Text.insert(1.0, myMd5_Digest)
-                self.write_log_to_Text("INFO:str_trans_to_md5 success")
-            except:
-                self.result_data_Text.delete(1.0, END)
-                self.result_data_Text.insert(1.0, "字符串转MD5失败")
-        else:
-            self.write_log_to_Text("ERROR:str_trans_to_md5 failed")
-
-    # 获取当前时间
-    def get_current_time(self):
-        current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-        return current_time
-
-    # 日志动态打印
-    def write_log_to_Text(self, logmsg):
-        global LOG_LINE_NUM
-        current_time = self.get_current_time()
-        logmsg_in = str(current_time) + " " + str(logmsg) + "\n"  # 换行
-        if LOG_LINE_NUM <= 7:
-            self.log_data_Text.insert(END, logmsg_in)
-            LOG_LINE_NUM = LOG_LINE_NUM + 1
-        else:
-            self.log_data_Text.delete(1.0, 2.0)
-            self.log_data_Text.insert(END, logmsg_in)
-
     # def get_virtual_number(self, real_number) -> str:
     def c_send_real_phone_number(self, ):
         real_number = self.init_data_Text.get(1.0, END).strip().replace("\n", "")
@@ -103,8 +66,9 @@ class Empower:
             self.result_data_Text.insert(END, json.dumps(data['empowered_data'], indent=2))
 
     def run_recv(self):
-        self.thread = threading.Thread(target=self.write_recv_msg_to_log)
-        self.thread.start()
+        thread = threading.Thread(target=self.write_recv_msg_to_log)
+        thread.setDaemon(True)
+        thread.start()
 
 
 def gui_start():

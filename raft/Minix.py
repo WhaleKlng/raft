@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 LEADER = "leader"
 FOLLOWER = "follower"
 CANDIDATE = "candidate"
-global LOG_LINE_NUM
 
 
 class ServerNode:
@@ -79,8 +78,8 @@ class ServerNode:
         self.init_window.mainloop()
 
     def load(self):
-        self.public_key_Text.insert(END, self.pubkey)
-        self.sec_key_Text.insert(END, self.privkey)
+        self.public_key_Text.insert(END, self.pubkey.save_pkcs1())
+        self.sec_key_Text.insert(END, self.privkey.save_pkcs1())
         file_path = self.id + '/key.json'
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
@@ -586,8 +585,9 @@ class ServerNode:
         self.str_trans_to_md5_button.grid(row=8, column=11)
 
     def run_node(self):
-        self.thread = threading.Thread(target=self.run)
-        self.thread.start()
+        thread = threading.Thread(target=self.run)
+        thread.setDaemon(True)
+        thread.start()
 
     def ins_log(self, data):
         self.log_data_Text.insert(END, data + "\n")

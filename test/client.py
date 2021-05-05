@@ -7,6 +7,7 @@ import time
 import json
 import socket
 import random
+from collections import defaultdict
 
 from multiprocessing import Process
 
@@ -39,16 +40,17 @@ def recv():
         data, addr = ss.recvfrom(65535)
 
         data = json.loads(data)
+        print(data)
         print('recv: ' + str(data['index']) + ' has been committed')
 
 
 if __name__ == '__main__':
     
-    p1 = Process(target=send, name='send', daemon=True)
-    p1.start()
+    # p1 = Process(target=send, name='send', daemon=True)
+    # p1.start()
     p2 = Process(target=recv, name='recv', daemon=True)
     p2.start()
 
 
-    p1.join()
+    # p1.join()
     p2.join()

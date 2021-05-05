@@ -5,6 +5,7 @@ import time
 import socket
 import random
 import logging
+from typing import List
 
 import rsa
 
@@ -109,19 +110,16 @@ class ServerNode:
         msg_type = msg['type']
         if msg_type == 'request_vote':  # 第一步
             public_key_str = self.pubkey.save_pkcs1().decode()
-            print("{}成为候选者并且发送公钥:{}".format(self.id, public_key_str))
+            # print("{}成为候选者并且发送公钥:{}".format(self.id, public_key_str))
             msg['p_key'] = public_key_str
             rst = json.dumps(msg).encode()
         elif msg_type == "request_vote_response":  # 第三步： 响应征票请求  需要加密消息并拼接一下
             rst = json.dumps(msg)
-            print("中间件拦截到了更随着的征票响应数据：{}".format(rst))
+            # print("中间件拦截到了更随着的征票响应数据：{}".format(rst))
             crypto_text = rsa.encrypt(rst.encode(), self.get_pub_key_by_addr(addr))
             rst = b"votes_response " + crypto_text
-            print("中间件后续处理消息为：{}".format(rst))
-            try:
-                self.cs.sendto(rst, addr)
-            except Exception as e:
-                print(e)
+            # print("中间件后续处理消息为：{}".format(rst))
+            # self.cs.sendto(rst, addr)
         else:
             rst = json.dumps(msg).encode()
         self.cs.sendto(rst, addr)
@@ -130,20 +128,20 @@ class ServerNode:
         msg, addr = self.ss.recvfrom(65535)
         # 如果收到的消息前缀中包含：vote_response的话，就切片处理之
         # msg 现在是一个字符串
-        print(msg)
-        print(type(msg))
+        # print(msg)
+        # print(type(msg))
         if b"votes_response " in msg:  # 收到的是征票响应类信息
-            print("进来了")
+            # print("进来了")
             data = msg[15:]  # 得到密文
             rst = json.loads(rsa.decrypt(data, self.privkey).decode())  # 解密之
-            print(rst)
+            # print(rst)
             return rst, addr
         else:  # 普通信息
             rst = json.loads(msg)
             if rst['type'] == "request_vote":  # 第二步：是征票请求
-                print("{}节点收到候选者{}的征票请求，且密码是{}".format(self.id, rst['src_id'], rst['p_key']))
+                # print("{}节点收到候选者{}的征票请求，且密码是{}".format(self.id, rst['src_id'], rst['p_key']))
                 self.key_pool[rst['src_id']] = rst['p_key']
-                print("存入节点公钥成功,现在的车子是{}".format(self.key_pool))
+                # print("存入节点公钥成功,现在的车子是{}".format(self.key_pool))
             return rst, addr
 
     def redirect(self, data, addr):
@@ -223,7 +221,10 @@ class ServerNode:
 
             response['success'] = True
             self.send(response, self.peers[data['src_id']])
-            self.log.append_entries(prev_log_index, data['entries'])
+            entries = data['entries']
+            # 在Minix中挂载log组件中的虚拟号码
+            self.sankuai_helper(entries)
+            self.log.append_entries(prev_log_index, entries)
 
             # append_entries rule 5
             leader_commit = data['leader_commit']
@@ -439,12 +440,14 @@ class ServerNode:
                            'entries': self.log.get_entries(self.next_index[dst_id]),
                            'leader_commit': self.commit_index
                            }
-
+                # leader先设置自己的日志
+                # 等待下一轮再转发给自己的跟随者们
                 self.send(request, self.peers[dst_id])
 
         # leader rules: rule 2
         if data and data['type'] == 'client_append_entries':
             data['term'] = self.current_term
+            self.sankuai_helper([data])
             self.log.append_entries(self.log.last_log_index, [data])
 
             self.my_log('leader：1. recv append_entries from client')
@@ -480,9 +483,9 @@ class ServerNode:
                 if count >= len(self.peers) // 2:
                     self.commit_index = N
                     self.my_log('leader：1. commit + 1')
-
                     if self.client_addr:
-                        response = {'index': self.commit_index}
+                        response = {'type': 'append_entries_ok', 'index': self.commit_index,
+                                    "empowered_data": self.log.empowered_data}
                         self.send(response, (self.client_addr[0], 10000))
 
                     break
@@ -492,6 +495,8 @@ class ServerNode:
 
     def run(self):
         while True:
+            self.append_entry_pool_text(self.log.entries)
+            # print(self.log.entries)
             self.change_window_title("{}:{}".format(self.id, self.role))
             if self.role == LEADER:
                 self.set_node_leader(self.id)
@@ -520,7 +525,22 @@ class ServerNode:
             except Exception as e:
                 logging.info(e)
 
-    #  GUI 设置窗口
+    def generate_4_random_number(self):
+        return "{}{}{}{}".format(random.randint(0, 9), random.randint(0, 9), random.randint(0, 9), random.randint(0, 9))
+
+    def sankuai_helper(self, entries: List):
+        for entry in entries:
+            real_number = entry.get("real_number", "")
+            if real_number not in self.log.empowered_data.values():
+                while True:
+                    short_num = random.choice(self.log.empower_pool)
+                    random_num = self.generate_4_random_number()
+                    cur_key = "{}#{}".format(short_num, random_num)
+                    if cur_key not in self.log.empowered_data:
+                        self.log.empowered_data[cur_key] = real_number
+                        break
+
+    # GUI 设置窗口
 
     def my_log(self, data):
         logging.info(data)
@@ -554,8 +574,8 @@ class ServerNode:
         self.public_key_Text.grid(row=3, column=0, columnspan=10)
         self.sec_key_Text = Text(self.init_window, width=66, height=3)  # 私钥
         self.sec_key_Text.grid(row=5, column=0, columnspan=10)
-        self.log_data_Text = Text(self.init_window, width=66, height=30)  # 内容池子
-        self.log_data_Text.grid(row=7, column=0, columnspan=10)
+        self.entry_pool_Text = Text(self.init_window, width=66, height=30)  # 内容池子
+        self.entry_pool_Text.grid(row=7, column=0, columnspan=10)
         # 文本框
         self.log_data_Text = Text(self.init_window, width=70, height=49)  # 日志框
         self.log_data_Text.grid(row=1, column=12, rowspan=15, columnspan=10)
@@ -579,3 +599,7 @@ class ServerNode:
     def set_node_leader(self, name):
         self.node_leader_Text.delete(1.0, END)
         self.node_leader_Text.insert(END, name)
+
+    def append_entry_pool_text(self, data):
+        self.entry_pool_Text.delete(1.0, END)
+        self.entry_pool_Text.insert(END, json.dumps(data, indent=2))

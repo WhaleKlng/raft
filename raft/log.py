@@ -5,12 +5,14 @@ __version__ = '1.0.0'
 
 import os
 import json
+from typing import List
 
 
 class Log(object):
 
     def __init__(self, path):
-
+        self.empowered_data = {}  # 赋能场景:已经隐私保护的隐私池子
+        self.empower_pool = [634601, 633572, 633572, 621906, 665903]  # 赋能场景：所提供的短接号池子
         self.file_path = path + '/log.json'
 
         if os.path.exists(self.file_path):
@@ -55,9 +57,9 @@ class Log(object):
         self.entries = self.entries[:max(0, prev_log_index)]
         self.save()
 
-    def append_entries(self, prev_log_index, entries):
+    def append_entries(self, prev_log_index, entries: List[dict]):
         # print('append_entries')
-
+        # 美团赋能场景
         self.entries = self.entries[:max(0, prev_log_index + 1)] + entries
 
         self.save()

@@ -1,7 +1,0 @@
-[
-    {
-        "type": "client_append_entries",
-        "timestamp": 1620143469,
-        "term": 2
-    }
-]

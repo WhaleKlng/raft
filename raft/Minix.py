@@ -9,6 +9,7 @@ from typing import List
 
 import rsa
 
+from utils import check_is_phone
 from .log import Log
 from tkinter import *
 
@@ -148,7 +149,7 @@ class ServerNode:
             return None
 
         if data['type'] == 'client_append_entries':
-            if self.role != 'leader':
+            if self.role != LEADER:
                 if self.leader_id:
                     self.my_log('redirect: client_append_entries to leader')
                     self.send(data, self.peers[self.leader_id])
@@ -156,6 +157,14 @@ class ServerNode:
             else:
                 self.client_addr = addr
                 return data
+        # # 外卖骑手功能
+        # if data['type'] == "ask_real_number":
+        #     if self.role != LEADER:  # 当前节点不能处理该消息
+        #         if self.leader_id:
+        #             self.my_log('redirect: ask_real_number to leader')
+        #             self.send(data, self.peers[self.leader_id])
+        #         return
+        #     else:
 
         if data['dst_id'] != self.id:
             self.my_log('redirect: to ' + data['dst_id'])
@@ -385,7 +394,7 @@ class ServerNode:
 
                 if vote_count >= len(self.peers) // 2:
                     self.my_log('           2. become leader')
-                    self.role = 'leader'
+                    self.role = LEADER
                     self.voted_for = None
                     self.save()
                     self.next_heartbeat_time = 0
@@ -518,7 +527,7 @@ class ServerNode:
                 if self.role == 'candidate':
                     self.candidate_do(data)
 
-                if self.role == 'leader':
+                if self.role == LEADER:
                     self.leader_do(data)
 
             except Exception as e:
@@ -530,7 +539,7 @@ class ServerNode:
     def sankuai_helper(self, entries: List):
         for entry in entries:
             real_number = entry.get("real_number", "")
-            if real_number not in self.log.empowered_data.values():
+            if check_is_phone(real_number) and real_number not in self.log.empowered_data.values():
                 while True:
                     short_num = random.choice(self.log.empower_pool)
                     random_num = self.generate_4_random_number()

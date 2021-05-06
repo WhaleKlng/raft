@@ -5,7 +5,7 @@ __version__ = '1.0.0'
 
 import sys
 
-from raft.my_gui import GUI
+from raft.empower_staff import GUI
 from raft.node2 import Node2
 from test.my_node import MNode
 

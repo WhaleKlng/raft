@@ -46,11 +46,11 @@ def recv():
 
 if __name__ == '__main__':
     
-    # p1 = Process(target=send, name='send', daemon=True)
-    # p1.start()
-    p2 = Process(target=recv, name='recv', daemon=True)
-    p2.start()
-
-
-    # p1.join()
-    p2.join()
+    p1 = Process(target=send, name='send', daemon=True)
+    p1.start()
+    # p2 = Process(target=recv, name='recv', daemon=True)
+    # p2.start()
+    #
+    #
+    p1.join()
+    # p2.join()

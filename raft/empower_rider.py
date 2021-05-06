@@ -1,29 +1,30 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 import json
 import socket
 import threading
 from tkinter import *
-import hashlib
-import time
 from typing import List
 import random
 
 LOG_LINE_NUM = 0
 
 
-class Empower:
+class EmpowerStaff:
+    """
+    运营人员客户端
+    """
+
     def __init__(self, server_list: List):
         self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ss.bind(('localhost', 10000))
         self.servers = server_list
+        self.empowered_data = None
         self.init_window = Tk()
         self.set_init_window()
 
     # 设置窗口
     def set_init_window(self):
-        self.init_window.title("隐私保护赋能客户端")  # 窗口名
+        self.init_window.title("隐私保护赋能客户端-骑手端")  # 窗口名
         self.init_window.geometry('1068x681+10+10')
         # 标签
         self.init_data_label = Label(self.init_window, text="待处理数据:用户真实号码", justify=LEFT)
@@ -62,6 +63,7 @@ class Empower:
             data = json.loads(msg)
             self.log_data_Text.insert(END, json.dumps(data, indent=2) + "\n")
             self.log_data_Text.see(END)
+            self.empowered_data = data['empowered_data']
             self.result_data_Text.delete(1.0, END)
             self.result_data_Text.insert(END, json.dumps(data['empowered_data'], indent=2))
 
@@ -69,14 +71,3 @@ class Empower:
         thread = threading.Thread(target=self.write_recv_msg_to_log)
         thread.setDaemon(True)
         thread.start()
-
-
-def gui_start():
-    Empower([
-        ('localhost', 10001),
-        ('localhost', 10002),
-        ('localhost', 10003)
-    ])
-
-
-gui_start()

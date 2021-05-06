@@ -148,7 +148,7 @@ class ServerNode:
         if data is None:
             return None
 
-        if data['type'] == 'client_append_entries':
+        if data['type'] == 'client_append_entries' or data['type'] == "empower_staff_heart":
             if self.role != LEADER:
                 if self.leader_id:
                     self.my_log('redirect: client_append_entries to leader')
@@ -157,18 +157,9 @@ class ServerNode:
             else:
                 self.client_addr = addr
                 return data
-        # # 外卖骑手功能
-        # if data['type'] == "ask_real_number":
-        #     if self.role != LEADER:  # 当前节点不能处理该消息
-        #         if self.leader_id:
-        #             self.my_log('redirect: ask_real_number to leader')
-        #             self.send(data, self.peers[self.leader_id])
-        #         return
-        #     else:
 
         if data['dst_id'] != self.id:
             self.my_log('redirect: to ' + data['dst_id'])
-            # self.my_log('redirec to leader')
             self.send(data, self.peers[data['dst_id']])
             return None
         else:
@@ -296,7 +287,7 @@ class ServerNode:
         all servers: rule 1, 2
         '''
 
-        # self.my_log('----------------------------all----------------------------------')
+        self.my_log('----------------------------all----------------------------------')
 
         if self.commit_index > self.last_applied:
             self.last_applied = self.commit_index
@@ -305,7 +296,7 @@ class ServerNode:
         if data is None:
             return
 
-        if data['type'] == 'client_append_entries':
+        if data['type'] == 'client_append_entries' or data['type'] == "empower_staff_heart":
             return
 
         if data['term'] > self.current_term:
@@ -429,7 +420,6 @@ class ServerNode:
         rules for fervers: leader
         '''
         self.my_log('--------------------------leader--------------------------------')
-
         # leader rules: rule 1, 3
         t = time.time()
         if t > self.next_heartbeat_time:
@@ -451,7 +441,6 @@ class ServerNode:
                 # leader先设置自己的日志
                 # 等待下一轮再转发给自己的跟随者们
                 self.send(request, self.peers[dst_id])
-
         # leader rules: rule 2
         if data and data['type'] == 'client_append_entries':
             data['term'] = self.current_term
@@ -463,7 +452,13 @@ class ServerNode:
             self.my_log('        3. log save')
 
             return
-
+        # 强打补丁
+        if data and data['type'] == "empower_staff_heart":
+            self.my_log("leader: recv Client init connection")
+            response = {'index': self.commit_index, "type": "empower_staff_heart_response",
+                        "empowered_data": self.log.empowered_data}
+            self.send(response, (self.client_addr[0], 10000))
+            return
         # leader rules: rule 3.1, 3.2
         if data and data['term'] == self.current_term:
             if data['type'] == 'append_entries_response':
@@ -514,7 +509,7 @@ class ServerNode:
                 try:
                     data, addr = self.recv()
                 except Exception as e:
-                    logging.info(e)
+                    logging.error(e)
                     data, addr = None, None
 
                 data = self.redirect(data, addr)
@@ -531,7 +526,7 @@ class ServerNode:
                     self.leader_do(data)
 
             except Exception as e:
-                logging.info(e)
+                logging.error(e)
 
     def generate_4_random_number(self):
         return "{}{}{}{}".format(random.randint(0, 9), random.randint(0, 9), random.randint(0, 9), random.randint(0, 9))

@@ -67,6 +67,7 @@ class EmpowerStaff:
         while True:
             msg, addr = self.ss.recvfrom(65535)
             data = json.loads(msg)
+            print(data)
             self.log_data_Text.insert(END, json.dumps(data, indent=2) + "\n")
             self.log_data_Text.see(END)
             self.empowered_data = data['empowered_data']
@@ -77,6 +78,9 @@ class EmpowerStaff:
         thread = threading.Thread(target=self.write_recv_msg_to_log)
         thread.setDaemon(True)
         thread.start()
+        random_addr = random.choice(self.servers)
+        print(random_addr)
+        self.ss.sendto(json.dumps({'type': 'empower_staff_heart'}).encode(), random_addr)
 
 
 def gui_start():

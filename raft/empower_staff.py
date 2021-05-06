@@ -8,8 +8,6 @@ import random
 
 from utils import check_is_phone
 
-LOG_LINE_NUM = 0
-
 
 class EmpowerStaff:
     """
@@ -21,6 +19,7 @@ class EmpowerStaff:
         self.ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ss.bind(('localhost', 10000))
         self.servers = server_list
+        self.rider_addr = ('localhost', 9999)
         self.empowered_data = None
         self.init_window = Tk()
         self.set_init_window()
@@ -67,7 +66,14 @@ class EmpowerStaff:
         while True:
             msg, addr = self.ss.recvfrom(65535)
             data = json.loads(msg)
-            print(data)
+            if data.get('type', "") == "ask_real_phone":
+                virtual_number = data['virtual_number']
+                try:
+                    rst = {virtual_number: self.empowered_data[virtual_number]}
+                except KeyError:
+                    rst = {"errMsg": "该短号不存在，请勿盲查"}
+                self.cs.sendto(json.dumps(rst).encode(), self.rider_addr)
+                continue
             self.log_data_Text.insert(END, json.dumps(data, indent=2) + "\n")
             self.log_data_Text.see(END)
             self.empowered_data = data['empowered_data']
@@ -79,7 +85,6 @@ class EmpowerStaff:
         thread.setDaemon(True)
         thread.start()
         random_addr = random.choice(self.servers)
-        print(random_addr)
         self.ss.sendto(json.dumps({'type': 'empower_staff_heart'}).encode(), random_addr)
 
 

@@ -9,7 +9,7 @@ from typing import List
 
 import rsa
 
-from utils import check_is_phone
+from raft.utils import check_is_phone
 from .log import Log
 from tkinter import *
 

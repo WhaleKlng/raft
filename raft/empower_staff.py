@@ -6,7 +6,7 @@ from tkinter import messagebox
 from typing import List
 import random
 
-from utils import check_is_phone
+from raft.utils import check_is_phone
 
 
 class EmpowerStaff:

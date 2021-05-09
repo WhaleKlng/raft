@@ -13,8 +13,10 @@ from raft.utils import check_is_phone
 from .log import Log
 from tkinter import *
 
+# 控制台日志的格式化
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# 全局变量
 LEADER = "leader"
 FOLLOWER = "follower"
 CANDIDATE = "candidate"
@@ -23,31 +25,34 @@ CANDIDATE = "candidate"
 class ServerNode:
 
     def __init__(self, conf):
-        self.role = 'follower'
-        self.id = conf['id']
-        self.addr = conf['addr']
+        self.role = 'follower'  # 每个节点都初始化为跟随者
+        self.id = conf['id']  # 还有一个ID name名字
+        self.addr = conf['addr']  # 监听地址，这个节点以后会接收（10001）收到数据 MSG {}
 
-        self.peers = conf['peers']
-        self.pubkey, self.privkey = rsa.newkeys(1024)  # 加密处理
+        self.peers = conf['peers']  # 初始化集群中的其他节点,记录一下 其他的地址
+        self.pubkey, self.privkey = rsa.newkeys(1024)  # 加密处理 rsa秘钥   rsa.newkeys(1024) 返回两个值 非对称加密
+        # 128字  1024  ++++ 520 4048长度
 
-        self.init_window = Tk()
-        self.set_init_window()
+        self.init_window = Tk()  # 初始化一个GUI界面
+        self.set_init_window()  # 业务代码了
 
-        # persistent state
+        # 选举任期相关：统治期
         self.current_term = 0
         self.voted_for = None
 
-        if not os.path.exists(self.id):
+        if not os.path.exists(self.id):  # 日志同步： 创建文件夹
             os.mkdir(self.id)
 
         # init persistent state
+        # 初始化任期：优先去读取过去的日志
         self.load()
-        self.log = Log(self.id)
+        self.log = Log(self.id)  # 是另外一个组件 日志同步的主要实现
 
         # volatile state
         # rule 1, 2
-        self.commit_index = 0
-        self.last_applied = 0
+        # 节点是不是也会自己保存消息，我
+        self.commit_index = 0  # 现在处理到那个了
+        self.last_applied = 0  # 我上一个是谁  某个节点  后面加进来的时候
 
         # volatile state on leaders
         # rule 1, 2
@@ -55,31 +60,31 @@ class ServerNode:
         self.match_index = {_id: -1 for _id in self.peers}
 
         # append entries
-        self.leader_id = None
+        self.leader_id = None  # 节点的Leader是谁
 
         # request vote
-        self.vote_ids = {_id: 0 for _id in self.peers}
+        self.vote_ids = {_id: 0 for _id in self.peers}  # 给那些节点征票 向别人 0就是标志这个人有没有给咱投赞成票
 
         # client request
-        self.client_addr = None
+        self.client_addr = None  # 客户端的地址
 
         # tick
-        self.wait_ms = (10, 20)
-        self.next_leader_election_time = time.time() + random.randint(*self.wait_ms)
-        self.next_heartbeat_time = 0
+        self.wait_ms = (10, 20)  # 初始化一个随机数
+        self.next_leader_election_time = time.time() + random.randint(*self.wait_ms)  # 随机计时器
+        self.next_heartbeat_time = 0  # 下一次心跳时间,成为Leader后立马发
 
-        self.key_pool = {}
+        self.key_pool = {}  # 美团的赋能
         # msg send and recv
-        self.ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 初始化了一个server socket  接收的
         self.ss.bind(self.addr)
         self.ss.settimeout(2)
 
-        self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 初始化了一个发送套接字
 
-        self.init_window.mainloop()
+        self.init_window.mainloop()  # GUI窗口持久化的
 
     def load(self):
-        self.public_key_Text.insert(END, self.pubkey.save_pkcs1())
+        self.public_key_Text.insert(END, self.pubkey.save_pkcs1())  # 插入一下秘钥们
         self.sec_key_Text.insert(END, self.privkey.save_pkcs1())
         file_path = self.id + '/key.json'
         if os.path.exists(file_path):
@@ -125,16 +130,18 @@ class ServerNode:
         self.cs.sendto(rst, addr)
 
     def recv(self):
-        msg, addr = self.ss.recvfrom(65535)
+        msg, addr = self.ss.recvfrom(65535)  # 收到了来自addr的msg消息
         # 如果收到的消息前缀中包含：vote_response的话，就切片处理之
         # msg 现在是一个字符串
         # print(msg)
         # print(type(msg))
         if b"votes_response " in msg:  # 收到的是征票响应类信息
             # print("进来了")
+            self.ins_log("密文:{}".format(msg))
             data = msg[15:]  # 得到密文
             rst = json.loads(rsa.decrypt(data, self.privkey).decode())  # 解密之
             # print(rst)
+            self.ins_log("解密得到的密文为:{}".format(rst))
             return rst, addr
         else:  # 普通信息
             rst = json.loads(msg)
@@ -149,8 +156,9 @@ class ServerNode:
             return None
 
         if data['type'] == 'client_append_entries' or data['type'] == "empower_staff_heart":
-            if self.role != LEADER:
-                if self.leader_id:
+            # 试想有人说客户端追加条目了，
+            if self.role != LEADER:  # 尝试转发
+                if self.leader_id:  # 且选出来了
                     self.my_log('redirect: client_append_entries to leader')
                     self.send(data, self.peers[self.leader_id])
                 return None
@@ -158,7 +166,7 @@ class ServerNode:
                 self.client_addr = addr
                 return data
 
-        if data['dst_id'] != self.id:
+        if data['dst_id'] != self.id:  # 如果这条消息不是给我看的，因为一个Leader可能会失去该身份
             self.my_log('redirect: to ' + data['dst_id'])
             self.send(data, self.peers[data['dst_id']])
             return None
@@ -299,7 +307,7 @@ class ServerNode:
         if data['type'] == 'client_append_entries' or data['type'] == "empower_staff_heart":
             return
 
-        if data['term'] > self.current_term:
+        if data['term'] > self.current_term:  # 如果消息中的任期大于自己的了，自己是井底之蛙
             self.my_log('all: 1. bigger term')
             self.my_log('     2. become follower')
             self.role = 'follower'
@@ -316,32 +324,32 @@ class ServerNode:
         '''
         self.my_log('--------------------------follower--------------------------------')
 
-        t = time.time()
+        t = time.time()  # 获取当前时间
         # follower rules: rule 1
-        if data:
+        if data:  # 如果命令来了或者消息来了
 
-            if data['type'] == 'append_entries':
+            if data['type'] == 'append_entries':  # 听命令：日志追加
                 self.my_log('follower: 1. recv append_entries from leader ' + data['src_id'])
 
-                if data['term'] == self.current_term:
+                if data['term'] == self.current_term:  # 我没有被落下
                     self.my_log('          2. same term')
                     self.my_log('          3. reset next_leader_election_time')
                     self.next_leader_election_time = t + random.randint(*self.wait_ms)
                 self.append_entries(data)
 
-            elif data['type'] == 'request_vote':
+            elif data['type'] == 'request_vote':  # 响应征票
                 self.my_log('follower: 1. recv request_vote from candidate ' + data['src_id'])
                 self.request_vote(data)
 
         # follower rules: rule 2
-        if t > self.next_leader_election_time:
+        if t > self.next_leader_election_time:  # 计时器已经结束
             self.my_log('follower：1. become candidate')
             self.next_leader_election_time = t + random.randint(*self.wait_ms)
             self.role = 'candidate'
             self.current_term += 1
-            self.voted_for = self.id
+            self.voted_for = self.id  # 立马给自己投票
             self.save()
-            self.vote_ids = {_id: 0 for _id in self.peers}
+            self.vote_ids = {_id: 0 for _id in self.peers}  # 初始化征票列表且认为他们都没投过票呢 是0
 
         return
 
@@ -354,7 +362,7 @@ class ServerNode:
         t = time.time()
         # candidate rules: rule 1
         for dst_id in self.peers:
-            if self.vote_ids[dst_id] == 0:
+            if self.vote_ids[dst_id] == 0:  # 这个零
                 self.my_log('candidate: 1. send request_vote to peer ' + dst_id)
                 request = {
                     'type': 'request_vote',
@@ -377,7 +385,7 @@ class ServerNode:
 
         if data and data['term'] == self.current_term:
             # candidate rules: rule 2
-            if data['type'] == 'request_vote_response':
+            if data['type'] == 'request_vote_response':  # 要响应收到的 选票们
                 self.my_log('candidate: 1. recv request_vote_response from follower ' + data['src_id'])
 
                 self.vote_ids[data['src_id']] = data['vote_granted']
@@ -394,7 +402,7 @@ class ServerNode:
                     return
 
             # candidate rules: rule 3
-            elif data['type'] == 'append_entries':
+            elif data['type'] == 'append_entries':  # 听命令
                 self.my_log('candidate: 1. recv append_entries from leader ' + data['src_id'])
                 self.my_log('           2. become follower')
                 self.next_leader_election_time = t + random.randint(*self.wait_ms)
@@ -404,7 +412,7 @@ class ServerNode:
                 return
 
         # candidate rules: rule 4
-        if t > self.next_leader_election_time:
+        if t > self.next_leader_election_time:  # 重新成为候选者
             self.my_log('candidate: 1. leader_election timeout')
             self.my_log('           2. become candidate')
             self.next_leader_election_time = t + random.randint(*self.wait_ms)
@@ -497,7 +505,7 @@ class ServerNode:
                 break
 
     def run(self):
-        while True:
+        while True:  # 一直在干一件事，导致不会结束
             self.append_entry_pool_text(self.log.entries)
             # print(self.log.entries)
             self.change_window_title("{}:{}".format(self.id, self.role))
@@ -512,9 +520,9 @@ class ServerNode:
                     logging.error(e)
                     data, addr = None, None
 
-                data = self.redirect(data, addr)
+                data = self.redirect(data, addr)  # 转发消息
 
-                self.all_do(data)
+                self.all_do(data)  # 所有节点都做的事情
 
                 if self.role == 'follower':
                     self.follower_do(data)
@@ -550,6 +558,10 @@ class ServerNode:
         self.ins_log(data)
 
     def set_init_window(self):
+        """
+        初始化页面的相关操作
+        :return:
+        """
         self.init_window.title(self.id)  # 窗口名
         # 290 160为窗口大小，+10 +10 定义窗口弹出时的默认展示位置
         self.init_window.geometry('1068x681+10+10')
@@ -585,12 +597,12 @@ class ServerNode:
 
         # 按钮
         self.str_trans_to_md5_button = Button(self.init_window, text="开启节点", bg="lightblue", width=10, height=2,
-                                              command=self.run_node)  # 调用内部方法  加()为直接调用
+                                              command=self.run_node)  # 调用内部方法  加()为直接调用 点了按钮开发跑raft的代码
         self.str_trans_to_md5_button.grid(row=8, column=11)
 
     def run_node(self):
-        thread = threading.Thread(target=self.run)
-        thread.setDaemon(True)
+        thread = threading.Thread(target=self.run)  # 开了一个县城去做self,run方法
+        thread.setDaemon(True)  # 设置成为守护线程
         thread.start()
 
     def ins_log(self, data):

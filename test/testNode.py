@@ -6,7 +6,6 @@ __version__ = '1.0.0'
 import sys
 
 from raft.Minix import ServerNode
-from test.my_node import MNode
 
 sys.path.append("..")
 
@@ -17,6 +16,7 @@ if __name__ == '__main__':
                       'node_3': ('localhost', 10003)
                       }
             }
-
+    #  实例化了一个对象node
+    # 永远先执行__init__方法
     node = ServerNode(conf)
 

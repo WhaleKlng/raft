@@ -56,6 +56,3 @@ class EmpowerRider:
         thread.start()
 
 
-EmpowerRider(
-    ('localhost', 10000),
-)

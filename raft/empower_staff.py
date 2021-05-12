@@ -86,14 +86,3 @@ class EmpowerStaff:
         thread.start()
         random_addr = random.choice(self.servers)
         self.ss.sendto(json.dumps({'type': 'empower_staff_heart'}).encode(), random_addr)
-
-
-def gui_start():
-    EmpowerStaff([
-        ('localhost', 10001),
-        ('localhost', 10002),
-        ('localhost', 10003)
-    ])
-
-
-gui_start()

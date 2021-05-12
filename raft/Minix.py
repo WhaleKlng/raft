@@ -81,7 +81,7 @@ class ServerNode:
 
         self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 初始化了一个发送套接字
 
-        self.init_window.mainloop()  # GUI窗口持久化的
+        # self.init_window.mainloop()  # GUI窗口持久化的
 
     def load(self):
         self.public_key_Text.insert(END, self.pubkey.save_pkcs1())  # 插入一下秘钥们
@@ -230,7 +230,7 @@ class ServerNode:
             self.send(response, self.peers[data['src_id']])
             entries = data['entries']
             # 在Minix中挂载log组件中的虚拟号码
-            self.sankuai_helper(entries)
+            # self.sankuai_helper(entries)
             self.log.append_entries(prev_log_index, entries)
 
             # append_entries rule 5
@@ -424,6 +424,7 @@ class ServerNode:
             return
 
     def leader_do(self, data):
+        print("Leader收到了{}".format(data))
         '''
         rules for fervers: leader
         '''
@@ -452,8 +453,8 @@ class ServerNode:
         # leader rules: rule 2
         if data and data['type'] == 'client_append_entries':
             data['term'] = self.current_term
-            self.sankuai_helper([data])
-            self.log.append_entries(self.log.last_log_index, [data])
+            cur_entries = self.sankuai_helper([data])
+            self.log.append_entries(self.log.last_log_index, cur_entries)
 
             self.my_log('leader：1. recv append_entries from client')
             self.my_log('        2. log append_entries')
@@ -465,6 +466,9 @@ class ServerNode:
             self.my_log("leader: recv Client init connection")
             response = {'index': self.commit_index, "type": "empower_staff_heart_response",
                         "empowered_data": self.log.empowered_data}
+            data['term'] = self.current_term
+            self.log.append_entries(self.log.last_log_index, [data])
+
             self.send(response, (self.client_addr[0], 10000))
             return
         # leader rules: rule 3.1, 3.2
@@ -542,14 +546,19 @@ class ServerNode:
     def sankuai_helper(self, entries: List):
         for entry in entries:
             real_number = entry.get("real_number", "")
-            if check_is_phone(real_number) and real_number not in self.log.empowered_data.values():
-                while True:
-                    short_num = random.choice(self.log.empower_pool)
-                    random_num = self.generate_4_random_number()
-                    cur_key = "{}#{}".format(short_num, random_num)
-                    if cur_key not in self.log.empowered_data:
-                        self.log.empowered_data[cur_key] = real_number
-                        break
+            if check_is_phone(real_number):
+                if real_number not in self.log.empowered_data.values():
+                    while True:
+                        short_num = random.choice(self.log.empower_pool)
+                        random_num = self.generate_4_random_number()
+                        cur_key = "{}#{}".format(short_num, random_num)
+                        if cur_key not in self.log.empowered_data:
+                            self.log.empowered_data[cur_key] = real_number
+                            entry['virtual_number'] = cur_key
+                            break
+                else:
+                    entry['virtual_number'] = self.log.empowered_data['real_number']
+        return entries
 
     # GUI 设置窗口
 
@@ -564,41 +573,52 @@ class ServerNode:
         """
         self.init_window.title(self.id)  # 窗口名
         # 290 160为窗口大小，+10 +10 定义窗口弹出时的默认展示位置
-        self.init_window.geometry('1068x681+10+10')
+        self.init_window.geometry('1050x900+10+10')
         # 节点Leader
+        canvas = Canvas(self.init_window, width=1068, height=100, )
+        image_file = PhotoImage(file="../raft/hdu.png")
+        canvas.create_image(534, 0, anchor='n', image=image_file)
+        canvas.pack(side='top')
+        Label(self.init_window, text='一种具备隐私保护的分布式共识算法设计与仿真', font=('Arial', 32)).pack()
+
+        # Leader
         self.node_leader_label = Label(self.init_window, text="节点Leader", justify=LEFT)
-        self.node_leader_label.grid(row=0, column=0)
+        self.node_leader_label.place(x=20, y=155)
+        self.node_leader_Text = Text(self.init_window, width=66, height=1.5)
+        self.node_leader_Text.place(x=20, y=175)
+
         # 节点公钥
         self.public_key_label = Label(self.init_window, text="节点公钥", justify=LEFT)
-        self.public_key_label.grid(row=2, column=0)
+        self.public_key_label.place(x=20, y=205)
+        self.public_key_Text = Text(self.init_window, width=66, height=5)  # 公钥
+        self.public_key_Text.place(x=20, y=225)
+
         # 节点私钥
         self.sec_key_label = Label(self.init_window, text="节点私钥", justify=LEFT)
-        self.sec_key_label.grid(row=4, column=0)
-        # # 收取的消息
-        # self.recv_msg_label = Label(self.init_window, text="收取的消息")
-        # self.recv_msg_label.grid(row=5, column=0)
-        # # 内容池
+        self.sec_key_label.place(x=20, y=291)
+        self.sec_key_Text = Text(self.init_window, width=66, height=7)  # 私钥
+        self.sec_key_Text.place(x=20, y=311)
+
+        #  内容池
         self.data_pool_label = Label(self.init_window, text="内容池")
-        self.data_pool_label.grid(row=6, column=0)
-        self.log_data_label = Label(self.init_window, text="日志", justify=LEFT)
-        self.log_data_label.grid(row=0, column=12)
-        # 标签
-        self.node_leader_Text = Text(self.init_window, width=66, height=1.5)
-        self.node_leader_Text.grid(row=1, column=0, columnspan=10)
-        self.public_key_Text = Text(self.init_window, width=66, height=3)  # 公钥
-        self.public_key_Text.grid(row=3, column=0, columnspan=10)
-        self.sec_key_Text = Text(self.init_window, width=66, height=3)  # 私钥
-        self.sec_key_Text.grid(row=5, column=0, columnspan=10)
+        self.data_pool_label.place(x=20, y=407)
         self.entry_pool_Text = Text(self.init_window, width=66, height=30)  # 内容池子
-        self.entry_pool_Text.grid(row=7, column=0, columnspan=10)
-        # 文本框
-        self.log_data_Text = Text(self.init_window, width=70, height=49)  # 日志框
-        self.log_data_Text.grid(row=1, column=12, rowspan=15, columnspan=10)
+        self.entry_pool_Text.place(x=20, y=427)
+
+        # 日志
+        self.log_data_label = Label(self.init_window, text="日志", justify=LEFT)
+        self.log_data_label.place(x=525, y=155)
+        self.log_data_Text = Text(self.init_window, width=70, height=49.4)  # 日志框
+        self.log_data_Text.place(x=525, y=175)
 
         # 按钮
         self.str_trans_to_md5_button = Button(self.init_window, text="开启节点", bg="lightblue", width=10, height=2,
                                               command=self.run_node)  # 调用内部方法  加()为直接调用 点了按钮开发跑raft的代码
-        self.str_trans_to_md5_button.grid(row=8, column=11)
+        self.str_trans_to_md5_button.place(x=440, y=835)
+
+        Label(self.init_window, text='朱雅鑫 17272232', font=('Arial', 16)).place(x=900, y=850)
+
+        self.init_window.mainloop()  # GUI窗口持久化的
 
     def run_node(self):
         thread = threading.Thread(target=self.run)  # 开了一个县城去做self,run方法
@@ -619,3 +639,4 @@ class ServerNode:
     def append_entry_pool_text(self, data):
         self.entry_pool_Text.delete(1.0, END)
         self.entry_pool_Text.insert(END, json.dumps(data, indent=2))
+        self.log_data_Text.see(END)

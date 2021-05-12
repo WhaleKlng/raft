@@ -5,9 +5,7 @@ __version__ = '1.0.0'
 
 import sys
 
-from raft.empower_staff import GUI
-from raft.node2 import Node2
-from test.my_node import MNode
+from raft.Minix import ServerNode
 
 sys.path.append("..")
 
@@ -18,8 +16,7 @@ if __name__ == '__main__':
                       'node_3': ('localhost', 10003)
                       }
             }
-    server1 = GUI()
+    #  实例化了一个对象node
+    # 永远先执行__init__方法
+    node = ServerNode(conf)
 
-    node = Node2(conf, gui=server1)
-
-    # node.run()

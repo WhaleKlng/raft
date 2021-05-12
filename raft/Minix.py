@@ -579,7 +579,7 @@ class ServerNode:
         image_file = PhotoImage(file="../raft/hdu.png")
         canvas.create_image(534, 0, anchor='n', image=image_file)
         canvas.pack(side='top')
-        Label(self.init_window, text='一种具备隐私保护的分布式共识算法设计与仿真', font=('Arial', 32)).pack()
+        Label(self.init_window, text='一种具备隐私保护的分布式共识算法设计与仿真', font=('楷体', 32)).pack()
 
         # Leader
         self.node_leader_label = Label(self.init_window, text="节点Leader", justify=LEFT)
@@ -616,7 +616,7 @@ class ServerNode:
                                               command=self.run_node)  # 调用内部方法  加()为直接调用 点了按钮开发跑raft的代码
         self.str_trans_to_md5_button.place(x=440, y=835)
 
-        Label(self.init_window, text='朱雅鑫 17272232', font=('Arial', 16)).place(x=900, y=850)
+        Label(self.init_window, text='朱雅鑫 17272109', font=('楷体', 16)).place(x=880, y=850)
 
         self.init_window.mainloop()  # GUI窗口持久化的
 

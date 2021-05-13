@@ -44,6 +44,7 @@ class ServerNode:
 
         # init persistent state
         # 初始化任期：优先去读取过去的日志
+        self.load()
         self.log = Log(self.id)  # 是另外一个组件 日志同步的主要实现
 
         # volatile state
@@ -80,12 +81,8 @@ class ServerNode:
         self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 初始化了一个发送套接字
 
         self.set_init_window()  # 业务代码了
-        self.load()
-
 
     def load(self):
-        self.public_key_Text.insert(END, self.pubkey.save_pkcs1())  # 插入一下秘钥们
-        self.sec_key_Text.insert(END, self.privkey.save_pkcs1())
         file_path = self.id + '/key.json'
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
@@ -617,7 +614,8 @@ class ServerNode:
         self.str_trans_to_md5_button.place(x=440, y=835)
 
         Label(self.init_window, text='朱雅鑫 17272109', font=('楷体', 16)).place(x=880, y=850)
-
+        self.public_key_Text.insert(END, self.pubkey.save_pkcs1())  # 插入一下秘钥们
+        self.sec_key_Text.insert(END, self.privkey.save_pkcs1())
         self.init_window.mainloop()  # GUI窗口持久化的
 
     def run_node(self):

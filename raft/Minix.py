@@ -34,7 +34,6 @@ class ServerNode:
         # 128字  1024  ++++ 520 4048长度
 
         self.init_window = Tk()  # 初始化一个GUI界面
-        self.set_init_window()  # 业务代码了
 
         # 选举任期相关：统治期
         self.current_term = 0
@@ -45,7 +44,6 @@ class ServerNode:
 
         # init persistent state
         # 初始化任期：优先去读取过去的日志
-        self.load()
         self.log = Log(self.id)  # 是另外一个组件 日志同步的主要实现
 
         # volatile state
@@ -81,7 +79,9 @@ class ServerNode:
 
         self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 初始化了一个发送套接字
 
-        # self.init_window.mainloop()  # GUI窗口持久化的
+        self.set_init_window()  # 业务代码了
+        self.load()
+
 
     def load(self):
         self.public_key_Text.insert(END, self.pubkey.save_pkcs1())  # 插入一下秘钥们
